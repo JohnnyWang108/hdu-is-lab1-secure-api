@@ -3,7 +3,7 @@ import tempfile
 
 # Point the app at a throwaway database before anything imports `app`.
 os.environ["DATABASE_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
-os.environ["JWT_SECRET"] = "test-secret"
+os.environ["JWT_SECRET"] = "test-secret-for-hdu-is-lab-work-1-2026!!"
 
 import pytest  # noqa: E402
 
