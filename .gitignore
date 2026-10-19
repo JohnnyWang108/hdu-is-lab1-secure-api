@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+bandit-report.*
+pip-audit-report.*
+pytest-report.xml

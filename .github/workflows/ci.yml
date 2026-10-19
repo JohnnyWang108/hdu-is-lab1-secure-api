@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------- tests
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run pytest (incl. security tests)
+        run: pytest -v --junitxml=pytest-report.xml
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: pytest-report.xml
+
+  # ------------------------------------------------------ SAST: Bandit
+  sast-bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install Bandit
+        run: pip install bandit
+      - name: Run Bandit static analysis
+        run: bandit -r . --exclude .venv,tests -f json -o bandit-report.json --exit-zero
+      - name: Fail on HIGH severity findings
+        run: |
+          python - <<'EOF'
+          import json
+          with open("bandit-report.json") as f:
+              data = json.load(f)
+          high = [r for r in data.get("results", []) if r.get("issue_severity") == "HIGH"]
+          print(f"Bandit: {len(high)} HIGH-severity finding(s), "
+                f"{len(data.get('results', []))} total finding(s)")
+          for r in high:
+              print(r["filename"], r["line_number"], r["issue_text"])
+          raise SystemExit(1 if high else 0)
+          EOF
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+
+  # ------------------------------------------------- SCA: pip-audit
+  sca-pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Install project dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run pip-audit (dependency vulnerability check)
+        run: pip-audit -r requirements.txt --format json -o pip-audit-report.json
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
