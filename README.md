@@ -103,7 +103,7 @@ browser that renders the response.
 | `sast-bandit` | [Bandit](https://github.com/PyCQA/bandit) | static analysis of our code; fails on HIGH-severity findings, report uploaded as artifact |
 | `sca-pip-audit` | [pip-audit](https://github.com/pypa/pip-audit) | scans dependencies against known CVEs; fails if any vulnerable dependency is found, report uploaded as artifact |
 
-**Latest pipeline run:** https://github.com/JohnnyWang108/hdu-is-lab1-secure-api/actions/runs/39204460652
+**Latest pipeline run:** https://github.com/JohnnyWang108/hdu-is-lab1-secure-api/actions/runs/39204547429
 
 **Screenshots of the reports (from the Actions tab):** the run page above
 shows the three green jobs; the SAST/SCA reports are also uploaded as
@@ -184,4 +184,4 @@ archive and the screenshots in the lab report.
 ## 7. Repository links
 
 - Repository: https://github.com/JohnnyWang108/hdu-is-lab1-secure-api
-- Latest CI run: https://github.com/JohnnyWang108/hdu-is-lab1-secure-api/actions/runs/39204460652
+- Latest CI run: https://github.com/JohnnyWang108/hdu-is-lab1-secure-api/actions/runs/39204547429
