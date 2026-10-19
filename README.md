@@ -119,9 +119,67 @@ $env:JWT_SECRET="your-secret"
 .venv\Scripts\pytest -v                # run the test suite
 ```
 
-## 6. CVE analysis: CVE-2018-1000656
+## 6. CVE analysis: CVE-2024-23334 (aiohttp directory traversal)
 
-<!-- CVE SECTION PLACEHOLDER — filled after Vulhub reproduction -->
+> Note: the lab manual suggests `vulhub/flask/CVE-2018-1000656`, but that
+> environment has been **removed from the current Vulhub repository**.
+> We therefore selected a current, comparably simple CVE from Vulhub:
+> **CVE-2024-23334** (`vulhub/python/CVE-2024-23334`), an arbitrary file
+> read in the aiohttp web framework — the same class of "improper input
+> handling in a web application component" the manual recommends.
+
+### What is it
+
+- **CVE-2024-23334** (CWE-22 Path Traversal, CVSS 3.1 **7.5 HIGH**,
+  aiohttp **≤ 3.9.1**, fixed in **3.9.2**).
+- When aiohttp serves static files with `web.static(..., follow_symlinks=True)`,
+  versions up to 3.9.1 do not validate that the resolved path stays inside
+  the static root directory. A request such as
+  `GET /static/../../../../../etc/passwd` reads arbitrary server files.
+
+### Reproduction (Vulhub, Docker)
+
+```bash
+git clone --depth 1 https://github.com/vulhub/vulhub.git
+cd vulhub/python/CVE-2024-23334
+docker compose up -d                     # vulnerable aiohttp 3.9.1 on :8080
+
+curl --path-as-is http://127.0.0.1:8080/static/../../../../../etc/passwd
+# -> contents of /etc/passwd (VULNERABLE)
+```
+
+### Root cause analysis
+
+The bug is an **improper input handling / missing path validation** flaw:
+`follow_symlinks=True` is intended to allow symlinks to leave the static
+root, but aiohttp ≤ 3.9.1 applied the same permission to *every* path —
+including paths containing `..` segments. The framework resolved the file
+without checking that the final path was still below the configured
+directory, so an attacker could escape it even without any symlink.
+(Fix: [aiohttp PR #8079](https://github.com/aio-libs/aiohttp/pull/8079),
+commit `1c335944d6a8b1298baf179b7c0b3069f10c514b` — proper containment
+validation in the static-file handler.)
+
+### Fix and verification
+
+The fix applied in this repository ([`cve-fix/`](cve-fix/)) upgrades the
+environment from `aiohttp==3.9.1` to **`aiohttp==3.9.2`** (application code
+unchanged):
+
+```bash
+docker compose down
+cd ../../cve-fix   # this repository's fixed environment
+docker compose up --build -d
+
+curl --path-as-is http://127.0.0.1:8080/static/../../../../../etc/passwd
+# -> 404 Not Found (FIXED)
+curl http://127.0.0.1:8080/static/hello.txt   # regression: still works
+```
+
+Evidence logs of both runs: see `evidence/cve-test.log` in the submission
+archive and the screenshots in the lab report.
+
+<!-- CVE SCREENSHOTS PLACEHOLDER -->
 
 ## 7. Repository links
 
