@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 1 安全 API 测试台</title>
+<style>
+  :root { --bg:#f5f6fa; --card:#fff; --line:#dfe4ea; --blue:#3b6ef5; --green:#1e9e4a; --red:#d64545; --code:#2f3542; }
+  * { box-sizing:border-box; }
+  body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); margin:0; padding:20px; color:#2f3542; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:#666; font-size:13px; margin-bottom:16px; }
+  .wrap { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; flex:1 1 340px; max-width:460px; }
+  .card h2 { font-size:15px; margin:0 0 10px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  label { display:block; font-size:13px; margin:8px 0 4px; color:#555; }
+  input[type=text], input[type=password], textarea {
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:14px; font-family:inherit;
+  }
+  textarea { resize:vertical; }
+  button { cursor:pointer; border:none; border-radius:6px; padding:8px 14px; font-size:13px; background:var(--blue); color:#fff; margin:6px 4px 0 0; }
+  button.ghost { background:#eef1f7; color:#2f3542; border:1px solid var(--line); }
+  button.warn { background:#f0932b; }
+  button:active { opacity:.8; }
+  .row { margin-top:8px; }
+  .token { font-family:Consolas,monospace; font-size:11px; background:#f0f3f8; border:1px solid var(--line); border-radius:6px; padding:6px 8px; word-break:break-all; max-height:70px; overflow:auto; }
+  .resp { margin-top:12px; }
+  .status { font-size:13px; font-weight:bold; margin-bottom:4px; }
+  .status.ok { color:var(--green); } .status.err { color:var(--red); }
+  pre { background:var(--code); color:#e8ecf2; font-family:Consolas,monospace; font-size:12px; padding:10px; border-radius:8px; overflow:auto; max-height:260px; white-space:pre-wrap; word-break:break-all; margin:0; }
+  .hint { font-size:12px; color:#8a90a0; margin-top:6px; }
+  .tag { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:#e8f5ee; color:#1e9e4a; margin-left:6px; }
+  .tag.off { background:#fdecec; color:#d64545; }
+</style>
+</head>
+<body>
+  <h1>🔐 Lab 1 安全 API 测试台</h1>
+  <div class="sub">本地测试前端 · 服务地址 http://127.0.0.1:5000 · 所有请求直接调用后端 REST API（与 curl 等价）</div>
+
+  <div class="wrap">
+    <!-- 登录 -->
+    <div class="card">
+      <h2>① 登录获取 JWT</h2>
+      <label>用户名</label>
+      <input type="text" id="username" value="admin">
+      <label>密码</label>
+      <input type="password" id="password" value="Admin#2024!">
+      <div class="row">
+        <button onclick="doLogin()">登录</button>
+        <button class="ghost" onclick="fill('admin','Admin#2024!')">填入 admin</button>
+        <button class="ghost" onclick="fill('alice','Alice@Pass123')">填入 alice</button>
+        <button class="ghost" onclick="logout()">清除 Token</button>
+      </div>
+      <div class="row">
+        当前 Token：
+        <span id="tokenState" class="tag off">未登录</span>
+        <div class="token" id="tokenBox">（登录后这里会显示 JWT 前 60 个字符…）</div>
+      </div>
+      <div class="resp">
+        <div class="status" id="loginStatus"></div>
+        <pre id="loginResp">等待请求…</pre>
+      </div>
+    </div>
+
+    <!-- 数据与留言 -->
+    <div class="card">
+      <h2>② 访问受保护接口</h2>
+      <label>是否携带 Token（试试关掉会怎样）</label>
+      <label style="font-size:13px"><input type="checkbox" id="useAuth" checked onchange="renderTokenState()"> 携带 Bearer Token</label>
+      <div class="row">
+        <button onclick="getData()">GET /api/data 查看用户</button>
+        <button onclick="getNotes()">GET /api/notes 查看留言</button>
+      </div>
+      <label>发一条留言（POST /api/notes）</label>
+      <textarea id="noteContent" rows="3">hello 世界</textarea>
+      <div class="row">
+        <button onclick="postNote()">发布留言</button>
+        <button class="warn" onclick="postXss()">发送 XSS 载荷（观察转义）</button>
+      </div>
+      <div class="resp">
+        <div class="status" id="apiStatus"></div>
+        <pre id="apiResp">等待请求…</pre>
+      </div>
+      <div class="hint">💡 试试「发送 XSS 载荷」后再点「查看留言」：<code>&lt;script&gt;</code> 会变成 <code>&amp;lt;script&amp;gt;</code>，这就是转义防 XSS。</div>
+    </div>
+
+    <!-- 攻击演示 -->
+    <div class="card">
+      <h2>③ 攻击演示（观察防御）</h2>
+      <div class="row">
+        <button class="warn" onclick="trySqli()">SQL 注入登录：' OR 1=1 --</button>
+      </div>
+      <div class="row">
+        <button class="warn" onclick="tryNoToken()">不带 Token 访问数据</button>
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="tryWrongPass()">错误密码登录</button>
+      </div>
+      <div class="resp">
+        <div class="status" id="atkStatus"></div>
+        <pre id="atkResp">等待请求…</pre>
+      </div>
+      <div class="hint">💡 这三个按钮都应被 401 拒绝——分别演示：参数化查询防 SQLi、JWT 中间件、密码哈希校验。</div>
+    </div>
+  </div>
+
+<script>
+const BASE = ""; // 同源调用
+let token = localStorage.getItem("lab1_token") || "";
+
+function renderTokenState() {
+  const el = document.getElementById("tokenState");
+  if (token) { el.textContent = "已登录 ✓"; el.className = "tag"; }
+  else { el.textContent = "未登录"; el.className = "tag off"; }
+  document.getElementById("tokenBox").textContent = token ? token.slice(0, 60) + "…" : "（登录后这里会显示 JWT 前 60 个字符…）";
+}
+
+async function call(method, path, body, useAuth) {
+  const headers = { "Content-Type": "application/json" };
+  if (useAuth && token) headers["Authorization"] = "Bearer " + token;
+  const resp = await fetch(BASE + path, {
+    method, headers,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  let text = await resp.text();
+  try { text = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+  return { status: resp.status, text };
+}
+
+function show(statusEl, preEl, result, okHint) {
+  statusEl.textContent = "HTTP " + result.status + (result.status >= 200 && result.status < 300 ? "  ✓ 成功" : "  ✗ 被拒绝/出错");
+  statusEl.className = "status " + (result.status >= 200 && result.status < 300 ? "ok" : "err");
+  preEl.textContent = result.text + (okHint ? "\n" + okHint : "");
+}
+
+async function doLogin() {
+  const r = await call("POST", "/auth/login", {
+    username: document.getElementById("username").value,
+    password: document.getElementById("password").value
+  }, false);
+  if (r.status === 200) {
+    token = JSON.parse(r.text).token;
+    localStorage.setItem("lab1_token", token);
+    renderTokenState();
+  }
+  show(document.getElementById("loginStatus"), document.getElementById("loginResp"), r);
+}
+
+async function getData() {
+  const useAuth = document.getElementById("useAuth").checked;
+  const r = await call("GET", "/api/data", null, useAuth);
+  show(document.getElementById("apiStatus"), document.getElementById("apiResp"), r);
+}
+
+async function getNotes() {
+  const useAuth = document.getElementById("useAuth").checked;
+  const r = await call("GET", "/api/notes", null, useAuth);
+  show(document.getElementById("apiStatus"), document.getElementById("apiResp"), r);
+}
+
+async function postNote() {
+  const useAuth = document.getElementById("useAuth").checked;
+  const r = await call("POST", "/api/notes", { content: document.getElementById("noteContent").value }, useAuth);
+  show(document.getElementById("apiStatus"), document.getElementById("apiResp"), r);
+}
+
+async function postXss() {
+  const useAuth = document.getElementById("useAuth").checked;
+  const r = await call("POST", "/api/notes", { content: "<script>alert('xss')</script> 恶意留言" }, useAuth);
+  show(document.getElementById("apiStatus"), document.getElementById("apiResp"), r, "→ 再去点「查看留言」，看 <script> 如何被转义。");
+}
+
+async function trySqli() {
+  const r = await call("POST", "/auth/login", { username: "' OR 1=1 --", password: "x" }, false);
+  show(document.getElementById("atkStatus"), document.getElementById("atkResp"), r, "→ 参数化查询把输入当数据，注入失败。");
+}
+
+async function tryNoToken() {
+  const r = await call("GET", "/api/data", null, false);
+  show(document.getElementById("atkStatus"), document.getElementById("atkResp"), r, "→ JWT 中间件拦截了无凭证访问。");
+}
+
+async function tryWrongPass() {
+  const r = await call("POST", "/auth/login", { username: "admin", password: "wrong-password" }, false);
+  show(document.getElementById("atkStatus"), document.getElementById("atkResp"), r, "→ bcrypt 校验失败，返回统一的 401。");
+}
+
+function fill(u, p) { document.getElementById("username").value = u; document.getElementById("password").value = p; }
+function logout() { token = ""; localStorage.removeItem("lab1_token"); renderTokenState(); }
+
+renderTokenState();
+</script>
+</body>
+</html>

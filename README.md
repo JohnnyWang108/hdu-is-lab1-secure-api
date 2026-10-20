@@ -119,6 +119,11 @@ $env:JWT_SECRET="your-secret"
 .venv\Scripts\pytest -v                # run the test suite
 ```
 
+**Web UI for manual testing:** open `http://127.0.0.1:5000/` in a browser —
+a small form-based test bench (`templates/index.html`) lets you log in, fetch
+`/api/data`, post notes, and fire one-click SQLi / XSS / no-token attack demos
+to watch the defenses respond, all without the command line.
+
 ## 6. CVE analysis: CVE-2024-23334 (aiohttp directory traversal)
 
 > Note: the lab manual suggests `vulhub/flask/CVE-2018-1000656`, but that
