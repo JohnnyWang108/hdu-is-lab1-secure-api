@@ -124,67 +124,73 @@ a small form-based test bench (`templates/index.html`) lets you log in, fetch
 `/api/data`, post notes, and fire one-click SQLi / XSS / no-token attack demos
 to watch the defenses respond, all without the command line.
 
-## 6. CVE analysis: CVE-2024-23334 (aiohttp directory traversal)
+## 6. CVE analysis: CVE-2019-14322 (Werkzeug SharedDataMiddleware path traversal)
 
-> Note: the lab manual suggests `vulhub/flask/CVE-2018-1000656`, but that
+> The lab manual suggests `vulhub/flask/CVE-2018-1000656`, but that
 > environment has been **removed from the current Vulhub repository**.
-> We therefore selected a current, comparably simple CVE from Vulhub:
-> **CVE-2024-23334** (`vulhub/python/CVE-2024-23334`), an arbitrary file
-> read in the aiohttp web framework — the same class of "improper input
-> handling in a web application component" the manual recommends.
+> The selected vulnerability is **CVE-2019-14322**, a Windows-specific
+> path traversal in Werkzeug (the WSGI layer underneath Flask) — the same
+> class of "improper input handling in a web application component" the
+> manual recommends, and it matches this project's Python/Flask stack.
 
 ### What is it
 
-- **CVE-2024-23334** (CWE-22 Path Traversal, CVSS 3.1 **7.5 HIGH**,
-  aiohttp **≤ 3.9.1**, fixed in **3.9.2**).
-- When aiohttp serves static files with `web.static(..., follow_symlinks=True)`,
-  versions up to 3.9.1 do not validate that the resolved path stays inside
-  the static root directory. A request such as
-  `GET /static/../../../../../etc/passwd` reads arbitrary server files.
+- **CVE-2019-14322** (CWE-22 Path Traversal, Werkzeug **≤ 0.15.4**,
+  fixed in **0.15.5**).
+- When `SharedDataMiddleware` serves static files on **Windows**, the
+  vulnerable versions build the file path with `os.path.join()` without
+  checking that the result stays inside the shared directory. On Windows a
+  path segment containing a **drive name** (e.g. `C:`) makes `os.path.join`
+  switch to that drive, so a request such as
+  `GET /static/C:/Windows/win.ini` reads arbitrary files from the server.
 
-### Reproduction (Vulhub, Docker)
+### Reproduction
 
 ```bash
-git clone --depth 1 https://github.com/vulhub/vulhub.git
-cd vulhub/python/CVE-2024-23334
-docker compose up -d                     # vulnerable aiohttp 3.9.1 on :8080
+# vulnerable demo (Werkzeug 0.15.4), app code in this repository
+pip install "Werkzeug==0.15.4"
+python wz_server.py                        # http://127.0.0.1:8000
 
-curl --path-as-is http://127.0.0.1:8080/static/../../../../../etc/passwd
-# -> contents of /etc/passwd (VULNERABLE)
+curl --path-as-is http://127.0.0.1:8000/static/C:/Windows/win.ini
+# -> contents of C:\Windows\win.ini (VULNERABLE)
+
+curl --path-as-is http://127.0.0.1:8000/static/D:/dsh_workspace/cve/wz/secrets.txt
+# -> SECRET: this file sits OUTSIDE the static root... (VULNERABLE)
 ```
 
 ### Root cause analysis
 
-The bug is an **improper input handling / missing path validation** flaw:
-`follow_symlinks=True` is intended to allow symlinks to leave the static
-root, but aiohttp ≤ 3.9.1 applied the same permission to *every* path —
-including paths containing `..` segments. The framework resolved the file
-without checking that the final path was still below the configured
-directory, so an attacker could escape it even without any symlink.
-(Fix: [aiohttp PR #8079](https://github.com/aio-libs/aiohttp/pull/8079),
-commit `1c335944d6a8b1298baf179b7c0b3069f10c514b` — proper containment
-validation in the static-file handler.)
+The bug is a **missing path-containment validation** flaw (CWE-22): the
+middleware concatenated the shared directory with the user-supplied
+pathname via `os.path.join()` and served the result. Python's
+`os.path.join()` on Windows treats a path component containing a drive
+name (`C:`) as absolute *on that drive*, silently redirecting the final
+path outside the shared directory. Werkzeug already had a hardened join
+helper — `safe_join()` (added in 0.12.2 for a related issue) — but
+`SharedDataMiddleware` used its own join implementation and was never
+updated to use it. Version 0.15.5 switches the middleware to `safe_join()`,
+which rejects drive-name segments, absolute paths and `..` sequences.
+Sources: [Pallets announcement](https://palletsprojects.com/blog/werkzeug-0-15-5-released/),
+[NVD](https://nvd.nist.gov/vuln/detail/CVE-2019-14322).
 
 ### Fix and verification
 
 The fix applied in this repository ([`cve-fix/`](cve-fix/)) upgrades the
-environment from `aiohttp==3.9.1` to **`aiohttp==3.9.2`** (application code
-unchanged):
+environment from `Werkzeug==0.15.4` to **`Werkzeug==0.15.5`** (application
+code unchanged):
 
 ```bash
-docker compose down
-cd ../../cve-fix   # this repository's fixed environment
-docker compose up --build -d
+pip install "Werkzeug==0.15.5"
+python wz_server.py
 
-curl --path-as-is http://127.0.0.1:8080/static/../../../../../etc/passwd
-# -> 404 Not Found (FIXED)
-curl http://127.0.0.1:8080/static/hello.txt   # regression: still works
+curl --path-as-is http://127.0.0.1:8000/static/C:/Windows/win.ini
+# -> no file contents returned (FIXED; safe_join rejects the escape)
+curl http://127.0.0.1:8000/static/hello.txt   # regression: still works
+curl http://127.0.0.1:8000/                   # regression: still works
 ```
 
-Evidence logs of both runs: see `evidence/cve-test.log` in the submission
-archive and the screenshots in the lab report.
-
-<!-- CVE SCREENSHOTS PLACEHOLDER -->
+Evidence logs of both runs: `evidence/cve-wz-vulnerable.log` and
+`evidence/cve-wz-fixed.log` in the submission archive.
 
 ## 7. Repository links
 
