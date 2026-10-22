@@ -12,7 +12,7 @@ from functools import wraps
 
 import bcrypt
 import jwt
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, g, jsonify, request
 
 from database import get_db, init_db, close_db
 
@@ -52,13 +52,6 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.teardown_appcontext(close_db)
     init_db()
-
-    # ------------------------------------------------------------------ #
-    # GET / - tiny web UI for manual testing (calls the API with fetch)
-    # ------------------------------------------------------------------ #
-    @app.get("/")
-    def index():
-        return render_template("index.html")
 
     # ------------------------------------------------------------------ #
     # POST /auth/login - issue a JWT after verifying bcrypt password hash

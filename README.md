@@ -119,10 +119,10 @@ $env:JWT_SECRET="your-secret"
 .venv\Scripts\pytest -v                # run the test suite
 ```
 
-**Web UI for manual testing:** open `http://127.0.0.1:5000/` in a browser —
-a small form-based test bench (`templates/index.html`) lets you log in, fetch
-`/api/data`, post notes, and fire one-click SQLi / XSS / no-token attack demos
-to watch the defenses respond, all without the command line.
+The API is tested with **Postman or curl** (see the request examples in
+section 2). No browser UI is served — `GET /` intentionally returns
+`404 {"error": "Not found"}`; keep the attack surface limited to the API
+itself.
 
 ## 6. CVE analysis: CVE-2019-14322 (Werkzeug SharedDataMiddleware path traversal)
 
